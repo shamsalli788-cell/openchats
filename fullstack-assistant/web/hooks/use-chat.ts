@@ -197,6 +197,46 @@ export function useChat(selection: ModelSelection, onFinish?: () => void) {
     [activeId, conversations],
   );
 
+  /**
+   * Saves voice transcripts. A message whose id is already in the chat is
+   * updated (late words); others are appended. With no conversation yet,
+   * creates one (titled from the first spoken user message), opens it, and
+   * returns its id so later transcripts from the same session land there.
+   */
+  const appendVoiceMessages = useCallback(
+    (conversationId: string | null, messages: ChatMessage[]): string => {
+      const now = Date.now();
+      if (conversationId) {
+        update(conversationId, (c) => {
+          const byId = new Map(messages.map((m) => [m.id, m]));
+          const updated = c.messages.map((m) => {
+            const next = byId.get(m.id);
+            if (!next) return m;
+            byId.delete(m.id);
+            return { ...m, content: next.content, meta: next.meta ?? m.meta };
+          });
+          return { ...c, messages: [...updated, ...byId.values()], updatedAt: now };
+        });
+        return conversationId;
+      }
+      const id = uid();
+      const firstUser = messages.find((m) => m.role === "user");
+      setConversations((list) => [
+        {
+          id,
+          title: makeTitle(firstUser?.content ?? "Voice chat"),
+          messages,
+          createdAt: now,
+          updatedAt: now,
+        },
+        ...list,
+      ]);
+      setActiveId(id);
+      return id;
+    },
+    [update],
+  );
+
   const clearAll = useCallback(() => {
     controller.current?.abort();
     const backup = conversations;
@@ -219,5 +259,6 @@ export function useChat(selection: ModelSelection, onFinish?: () => void) {
     openChat,
     deleteChat,
     clearAll,
+    appendVoiceMessages,
   };
 }

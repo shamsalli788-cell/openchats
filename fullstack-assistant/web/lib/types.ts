@@ -47,6 +47,8 @@ export interface ChatMessage {
   error?: string;
   pending?: boolean;
   feedback?: "up" | "down" | null;
+  /** Spoken in voice mode (transcript) rather than typed. */
+  voice?: boolean;
 }
 
 export interface Conversation {

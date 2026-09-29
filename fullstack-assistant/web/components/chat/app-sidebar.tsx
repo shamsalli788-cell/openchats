@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  AudioLinesIcon,
   CheckIcon,
   EllipsisIcon,
   MonitorIcon,
@@ -145,11 +146,17 @@ export function AppSidebar({
                       onClick={() => onOpen(c.id)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "w-full truncate rounded-md py-1.5 pr-9 pl-3 text-left text-sm transition-colors hover:bg-sidebar-accent",
+                        "flex w-full items-center gap-2 rounded-md py-1.5 pr-9 pl-3 text-left text-sm transition-colors hover:bg-sidebar-accent",
                         active && "bg-sidebar-accent font-medium",
                       )}
                     >
-                      {c.title}
+                      {c.messages.some((m) => m.voice) && (
+                        <AudioLinesIcon
+                          aria-label="Voice chat"
+                          className="size-3.5 shrink-0 text-muted-foreground"
+                        />
+                      )}
+                      <span className="truncate">{c.title}</span>
                     </button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

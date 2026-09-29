@@ -1,18 +1,15 @@
 [project]
-name = "ai-assistant-api"
+name = "ai-assistant-agent"
 version = "1.0.0"
-description = "FastAPI backend for the AI Assistant: local Ollama models first, cloud providers as fallback."
+description = "LiveKit voice agent for the AI Assistant. Answers come from the app's API, so model choice and fallback match text chat."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi[standard]>=0.141",
-    "pydantic>=2.11",
+    "livekit-agents>=1.8.3",
+    "livekit-plugins-ai-coustics>=0.3.2",
     "pydantic-settings>=2.15",
-    "ollama>=0.6",
-    "openai>=3.19",
-    "anthropic>=1.8",
+    "python-dotenv>=1.1",
     "httpx>=0.28",
-    "livekit-api>=1.2.1",
 ]
 
 [dependency-groups]
@@ -32,9 +29,6 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "ASYNC", "RUF", "PL"]
 ignore = ["PLR0913", "PLR2004"]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["PLR2004", "S101"]
 
 [tool.ruff.format]
 quote-style = "double"
