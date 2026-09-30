@@ -83,6 +83,24 @@ Voice settings (agent/.env): `VOICE_STT_MODEL`, `VOICE_STT_LANGUAGE`,
 `VOICE_NOISE_CANCELLATION`, and `VOICE_LLM` (`app`, or a LiveKit Inference model
 id to bypass the app). Offer a voice picker with `VOICE_VOICES` in api/.env.
 
+## Photos
+
+Add photos with the **+** button, by pasting, or by dropping them on the page
+(up to 5 per message, JPEG, PNG, WebP or GIF, 10 MB each). The browser scales
+them to 2048 px on the long edge and re-encodes them, which also removes
+metadata such as GPS location. HEIC isn't supported yet; the app says how to
+share a JPEG instead.
+
+Photos need a model that can see images: `ollama pull gemma3` (or `llava`,
+`qwen2.5vl`), or a cloud key. The model menu marks these "Sees images". Auto
+picks one whenever a chat has photos; a chosen text-only model shows a notice
+with a one-click switch. The line under the input says whether photos stay on
+this computer or which provider receives them.
+
+Photos are stored in the browser (IndexedDB) next to the chat history; photos
+no chat uses are cleaned up after a day. Limits are set in `api/.env` (see
+`api/README.md`).
+
 ## How model selection works
 
 The model dropdown shows three groups:

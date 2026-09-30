@@ -2,16 +2,73 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { streamChat } from "@/lib/api";
+import { streamChat, type ApiMessage } from "@/lib/api";
 import { makeTitle, readStorage, uid, writeStorage } from "@/lib/helpers";
-import type { ChatMessage, Conversation, ModelSelection } from "@/lib/types";
+import { collectGarbage, loadImage } from "@/lib/image-store";
+import { blobToBase64, photoLabel, textWithPhotoNote } from "@/lib/images";
+import type { ChatImage, ChatMessage, Conversation, ModelSelection } from "@/lib/types";
 
 const KEY = "assistant.conversations.v1";
 const MAX_SAVED = 200;
+const GC_GRACE_MS = 24 * 60 * 60 * 1000;
 
 type Updater = (c: Conversation) => Conversation;
 
-export function useChat(selection: ModelSelection, onFinish?: () => void) {
+export interface ImagePolicy {
+  /** False when the chosen model is text-only: photos are described as text instead. */
+  send: boolean;
+  /** Most photos sent in one request; the newest are kept. */
+  perRequest: number;
+  /** The API's current limits; older photos beyond them become a note. */
+  perMessage: number;
+  maxBytes: number;
+}
+
+/**
+ * The request body for a history: the newest photos (up to the limit) are
+ * attached as base64; older or unsendable photos become a short text note so
+ * the model still knows they were there.
+ */
+async function toApiMessages(history: ChatMessage[], policy: ImagePolicy): Promise<ApiMessage[]> {
+  let budget = policy.send ? policy.perRequest : 0;
+  const out: ApiMessage[] = [];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    const images = m.images ?? [];
+    // An empty user turn (e.g. a voice transcript with no words) adds nothing.
+    if (m.role === "user" && !m.content.trim() && !images.length) continue;
+    if (!images.length || m.role !== "user") {
+      out.push({ role: m.role, content: m.content });
+      continue;
+    }
+    const allowed = Math.min(budget, policy.perMessage);
+    const chosen = allowed > 0 ? images.filter((img) => img.size <= policy.maxBytes).slice(-allowed) : [];
+    budget -= chosen.length;
+    const loaded = await Promise.all(
+      chosen.map(async (img) => {
+        const blob = await loadImage(img.id);
+        return blob ? { media_type: img.mediaType, data: await blobToBase64(blob) } : null;
+      }),
+    );
+    const sent = loaded.filter((x) => x !== null);
+    if (sent.length === images.length) {
+      out.push({ role: m.role, content: m.content, images: sent });
+    } else {
+      const left = images.length - sent.length;
+      const note = sent.length
+        ? `[${photoLabel(left)} more not included]\n${m.content}`.trim()
+        : textWithPhotoNote(m);
+      out.push({ role: m.role, content: note, ...(sent.length ? { images: sent } : {}) });
+    }
+  }
+  return out.reverse();
+}
+
+export function useChat(
+  selection: ModelSelection,
+  imagePolicy: ImagePolicy = { send: true, perRequest: 20, perMessage: 5, maxBytes: 10 * 1024 * 1024 },
+  onFinish?: () => void,
+) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
@@ -20,15 +77,23 @@ export function useChat(selection: ModelSelection, onFinish?: () => void) {
   const controller = useRef<AbortController | null>(null);
   const selectionRef = useRef(selection);
   const onFinishRef = useRef(onFinish);
+  const imagePolicyRef = useRef(imagePolicy);
   useEffect(() => {
     selectionRef.current = selection;
     onFinishRef.current = onFinish;
+    imagePolicyRef.current = imagePolicy;
   });
 
-  // Load once on the client (localStorage is not available during SSR).
+  // Load once on the client (localStorage is not available during SSR), then
+  // delete stored photos that no saved chat uses any more.
   useEffect(() => {
-    setConversations(readStorage<Conversation[]>(KEY, []));
+    const startedAt = Date.now();
+    const saved = readStorage<Conversation[]>(KEY, []);
+    setConversations(saved);
     setHydrated(true);
+    const keep = new Set(saved.flatMap((c) => c.messages.flatMap((m) => m.images ?? []).map((i) => i.id)));
+    // A day's grace: another tab may be sending photos its chats haven't saved yet.
+    void collectGarbage(keep, startedAt - GC_GRACE_MS).catch(() => {});
   }, []);
 
   // Persist whenever we're not mid-stream (avoids writing on every token).
@@ -84,8 +149,13 @@ export function useChat(selection: ModelSelection, onFinish?: () => void) {
       };
 
       try {
+        const messages = await toApiMessages(
+          history.filter((m) => !m.error),
+          imagePolicyRef.current,
+        );
+        if (ctrl.signal.aborted) throw new DOMException("Aborted", "AbortError");
         await streamChat({
-          messages: history.filter((m) => !m.error).map(({ role, content }) => ({ role, content })),
+          messages,
           selection: selectionRef.current,
           signal: ctrl.signal,
           onMeta: (meta) => patchMessage(convId, reply.id, { meta }),
@@ -118,10 +188,16 @@ export function useChat(selection: ModelSelection, onFinish?: () => void) {
   );
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, images: ChatImage[] = []) => {
       const content = text.trim();
-      if (!content || controller.current) return;
-      const userMsg: ChatMessage = { id: uid(), role: "user", content, createdAt: Date.now() };
+      if ((!content && !images.length) || controller.current) return;
+      const userMsg: ChatMessage = {
+        id: uid(),
+        role: "user",
+        content,
+        createdAt: Date.now(),
+        ...(images.length ? { images } : {}),
+      };
       const existing = conversations.find((c) => c.id === activeId);
       if (existing) {
         void generate(existing.id, [...existing.messages.filter((m) => !m.error), userMsg]);
@@ -129,7 +205,7 @@ export function useChat(selection: ModelSelection, onFinish?: () => void) {
       }
       const conv: Conversation = {
         id: uid(),
-        title: makeTitle(content),
+        title: makeTitle(content || (images.length > 1 ? `${images.length} photos` : "Photo")),
         messages: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),

@@ -20,7 +20,9 @@ async function errorMessage(res: Response): Promise<string> {
   try {
     const body = (await res.json()) as { detail?: unknown };
     if (typeof body.detail === "string") return body.detail;
-    if (Array.isArray(body.detail) && body.detail[0]?.msg) return String(body.detail[0].msg);
+    if (Array.isArray(body.detail) && body.detail[0]?.msg) {
+      return String(body.detail[0].msg).replace(/^Value error, /, "");
+    }
   } catch {
     /* not JSON */
   }
@@ -45,8 +47,20 @@ export async function fetchModels(refresh = false, signal?: AbortSignal): Promis
   return (await res.json()) as ModelsResponse;
 }
 
+export interface ApiImage {
+  media_type: string;
+  /** Base64 without the data: prefix. */
+  data: string;
+}
+
+export interface ApiMessage {
+  role: Role;
+  content: string;
+  images?: ApiImage[];
+}
+
 export interface StreamChatOptions {
-  messages: { role: Role; content: string }[];
+  messages: ApiMessage[];
   selection: ModelSelection;
   signal: AbortSignal;
   onMeta: (meta: StreamMeta) => void;

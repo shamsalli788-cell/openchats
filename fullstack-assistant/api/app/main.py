@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
+from app.core.body_limit import BodySizeLimit
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.providers.registry import ProviderRegistry, build_providers
@@ -30,7 +31,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = settings
         app.state.registry = registry or ProviderRegistry(
-            build_providers(settings), settings.model_cache_ttl_seconds
+            build_providers(settings), settings.model_cache_ttl_seconds, settings.vision_models
         )
         yield
         await app.state.registry.aclose()
@@ -48,6 +49,9 @@ def create_app(
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["*"],
     )
+    # Base64 adds a third; allow the photo budget plus room for the text.
+    max_body = settings.max_images_per_request * settings.max_image_bytes * 4 // 3 + 8 * 1024 * 1024
+    app.add_middleware(BodySizeLimit, max_bytes=max_body, paths=("/api/chat",))
     for router in (health.router, models.router, chat.router):
         app.include_router(router, prefix="/api")
     mount_voice(app, brain=chat_brain, settings=voice_settings)  # voice mode (LiveKit)

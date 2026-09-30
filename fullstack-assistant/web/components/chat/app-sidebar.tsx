@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   AudioLinesIcon,
+  ImageIcon,
   CheckIcon,
   EllipsisIcon,
   MonitorIcon,
@@ -153,6 +154,12 @@ export function AppSidebar({
                       {c.messages.some((m) => m.voice) && (
                         <AudioLinesIcon
                           aria-label="Voice chat"
+                          className="size-3.5 shrink-0 text-muted-foreground"
+                        />
+                      )}
+                      {c.messages.some((m) => m.images?.length) && (
+                        <ImageIcon
+                          aria-label="Has photos"
                           className="size-3.5 shrink-0 text-muted-foreground"
                         />
                       )}

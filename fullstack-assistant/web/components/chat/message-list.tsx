@@ -62,6 +62,11 @@ export function MessageList({
               key={m.id}
               message={m}
               isLast={i === conversation.messages.length - 1}
+              lookingIds={
+                m.pending && !m.content
+                  ? conversation.messages[i - 1]?.images?.map((img) => img.id)
+                  : undefined
+              }
               onRegenerate={onRegenerate}
               onFeedback={onFeedback}
             />

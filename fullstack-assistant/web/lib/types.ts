@@ -8,6 +8,8 @@ export interface ModelInfo {
   size_bytes?: number | null;
   parameter_size?: string | null;
   family?: string | null;
+  /** Can read images. */
+  vision?: boolean;
 }
 
 export interface ProviderStatus {
@@ -20,10 +22,19 @@ export interface ProviderStatus {
   models: ModelInfo[];
 }
 
+export interface ImageLimits {
+  per_message: number;
+  per_request: number;
+  max_bytes: number;
+}
+
 export interface ModelsResponse {
   providers: ProviderStatus[];
   default: ModelInfo | null;
+  /** What Auto answers with when a message has photos. */
+  default_vision?: ModelInfo | null;
   has_local_models: boolean;
+  image_limits?: ImageLimits | null;
 }
 
 /** `null` means "Auto": local model first, then cloud fallback. */
@@ -38,6 +49,21 @@ export interface StreamMeta {
   notice: string | null;
 }
 
+/**
+ * A photo in a message. Only this metadata lives in the chat history
+ * (localStorage); the image itself is in IndexedDB under `id` (lib/image-store).
+ */
+export interface ChatImage {
+  id: string;
+  name: string;
+  mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  width: number;
+  height: number;
+  size: number;
+  /** Original size when the photo was scaled down before sending, e.g. "4032×3024". */
+  resizedFrom?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: Role;
@@ -49,6 +75,8 @@ export interface ChatMessage {
   feedback?: "up" | "down" | null;
   /** Spoken in voice mode (transcript) rather than typed. */
   voice?: boolean;
+  /** Photos attached to a user message. */
+  images?: ChatImage[];
 }
 
 export interface Conversation {
